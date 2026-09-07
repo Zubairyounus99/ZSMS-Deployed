@@ -76,8 +76,13 @@ func ValidateUserToken(tokenString, secret string) (*UserClaims, error) {
 	return nil, errors.New("invalid token claims")
 }
 
+// DefaultTestUserID is the deterministic UUID used when auth is bypassed and DB is not reachable.
+var DefaultTestUserID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
 // RequireUserAuth middleware enforces that the request has a valid User session JWT.
-func RequireUserAuth(secret string) fiber.Handler {
+// When authDisabled is true, requests without a valid user token will be automatically
+// assigned to the default system test administrator account.
+func RequireUserAuth(secret string, authDisabled bool, db *database.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		var tokenStr string
@@ -94,6 +99,43 @@ func RequireUserAuth(secret string) fiber.Handler {
 			tokenStr = c.Cookies("zsms_token")
 		}
 
+		if tokenStr != "" {
+			claims, err := ValidateUserToken(tokenStr, secret)
+			if err == nil && claims != nil {
+				c.Locals("user_id", claims.UserID)
+				c.Locals("user_email", claims.Email)
+				return c.Next()
+			}
+		}
+
+		// When auth is disabled, bypass and resolve default test user
+		if authDisabled {
+			if db != nil && db.DB != nil {
+				var id uuid.UUID
+				var email string
+				// Query primary test admin user
+				err := db.DB.QueryRowContext(c.Context(), "SELECT id, email FROM users WHERE email = 'admin@ztechai.us' AND deleted_at IS NULL LIMIT 1").Scan(&id, &email)
+				if err == nil && id != uuid.Nil {
+					c.Locals("user_id", id)
+					c.Locals("user_email", email)
+					return c.Next()
+				}
+
+				// Fallback to first available active user in the database
+				err = db.DB.QueryRowContext(c.Context(), "SELECT id, email FROM users WHERE deleted_at IS NULL ORDER BY created_at ASC LIMIT 1").Scan(&id, &email)
+				if err == nil && id != uuid.Nil {
+					c.Locals("user_id", id)
+					c.Locals("user_email", email)
+					return c.Next()
+				}
+			}
+
+			// Fallback deterministic testing user
+			c.Locals("user_id", DefaultTestUserID)
+			c.Locals("user_email", "admin@ztechai.us")
+			return c.Next()
+		}
+
 		if tokenStr == "" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"success": false,
@@ -104,21 +146,13 @@ func RequireUserAuth(secret string) fiber.Handler {
 			})
 		}
 
-		claims, err := ValidateUserToken(tokenStr, secret)
-		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"error": fiber.Map{
-					"code":    "INVALID_TOKEN",
-					"message": "Session token is invalid or expired. Please sign in again.",
-				},
-			})
-		}
-
-		c.Locals("user_id", claims.UserID)
-		c.Locals("user_email", claims.Email)
-
-		return c.Next()
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"error": fiber.Map{
+				"code":    "INVALID_TOKEN",
+				"message": "Session token is invalid or expired. Please sign in again.",
+			},
+		})
 	}
 }
 

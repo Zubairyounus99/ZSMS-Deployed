@@ -91,9 +91,9 @@ const email = ref('admin@ztechai.us')
 const password = ref('Admin1234!')
 const errorMessage = ref('')
 
-onMounted(() => {
-  authStore.initAuth()
-  if (authStore.isAuthenticated) {
+onMounted(async () => {
+  await authStore.initAuth()
+  if (authStore.authDisabled || authStore.isAuthenticated) {
     navigateTo('/dashboard')
   }
 })

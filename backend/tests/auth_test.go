@@ -1,8 +1,11 @@
 package tests
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"us.ztechai.zsms/backend/internal/auth"
 )
@@ -72,5 +75,87 @@ func TestTokenHashing(t *testing.T) {
 
 	if auth.HashToken("different_token") == hash1 {
 		t.Errorf("different tokens must have different hashes")
+	}
+}
+
+func TestRequireUserAuthBypass(t *testing.T) {
+	app := fiber.New()
+	secret := "test_secret_for_bypass_mode"
+
+	app.Get("/test-bypass", auth.RequireUserAuth(secret, true, nil), func(c *fiber.Ctx) error {
+		userID := c.Locals("user_id").(uuid.UUID)
+		userEmail := c.Locals("user_email").(string)
+		return c.JSON(fiber.Map{
+			"user_id":    userID.String(),
+			"user_email": userEmail,
+		})
+	})
+
+	// 1. Request with no auth header in bypass mode -> must succeed with 200 and default test user
+	req := httptest.NewRequest("GET", "/test-bypass", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200 in bypass mode, got: %d", resp.StatusCode)
+	}
+
+	// 2. Request with invalid auth header in bypass mode -> must still succeed with 200
+	reqInvalid := httptest.NewRequest("GET", "/test-bypass", nil)
+	reqInvalid.Header.Set("Authorization", "Bearer invalid_gibberish_token")
+	respInvalid, err := app.Test(reqInvalid)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if respInvalid.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200 in bypass mode with invalid token, got: %d", respInvalid.StatusCode)
+	}
+}
+
+func TestRequireUserAuthEnforced(t *testing.T) {
+	app := fiber.New()
+	secret := "test_secret_for_enforced_mode"
+
+	app.Get("/test-enforced", auth.RequireUserAuth(secret, false, nil), func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	// 1. Request with no auth header in enforced mode -> must fail with 401
+	req := httptest.NewRequest("GET", "/test-enforced", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected status 401 in enforced mode without token, got: %d", resp.StatusCode)
+	}
+
+	// 2. Request with invalid token in enforced mode -> must fail with 401
+	reqInvalid := httptest.NewRequest("GET", "/test-enforced", nil)
+	reqInvalid.Header.Set("Authorization", "Bearer bad_token")
+	respInvalid, err := app.Test(reqInvalid)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if respInvalid.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected status 401 in enforced mode with bad token, got: %d", respInvalid.StatusCode)
+	}
+
+	// 3. Request with valid token in enforced mode -> must succeed with 200
+	validUserID := uuid.New()
+	validToken, err := auth.GenerateUserToken(validUserID, "user@ztechai.us", secret, 1)
+	if err != nil {
+		t.Fatalf("failed to generate valid token: %v", err)
+	}
+
+	reqValid := httptest.NewRequest("GET", "/test-enforced", nil)
+	reqValid.Header.Set("Authorization", "Bearer "+validToken)
+	respValid, err := app.Test(reqValid)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if respValid.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200 in enforced mode with valid token, got: %d", respValid.StatusCode)
 	}
 }

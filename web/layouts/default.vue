@@ -14,6 +14,18 @@
 
       <v-spacer />
 
+      <!-- Auth Bypass Notice Badge -->
+      <v-chip
+        v-if="authStore.authDisabled"
+        size="small"
+        color="warning"
+        variant="flat"
+        class="mr-3 font-weight-bold"
+      >
+        <v-icon start size="small">mdi-shield-alert-outline</v-icon>
+        Authentication Disabled — Testing Mode
+      </v-chip>
+
       <!-- API Connectivity Status Badge -->
       <v-chip
         size="small"
@@ -193,8 +205,8 @@ const mgmtNav = [
 ]
 
 onMounted(async () => {
-  authStore.initAuth()
-  if (!authStore.isAuthenticated) {
+  await authStore.initAuth()
+  if (!authStore.authDisabled && !authStore.isAuthenticated) {
     navigateTo('/auth/login')
   }
 

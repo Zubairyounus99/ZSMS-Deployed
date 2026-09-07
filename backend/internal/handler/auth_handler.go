@@ -188,6 +188,15 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	})
 }
 
+func (h *AuthHandler) Config(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"data": fiber.Map{
+			"auth_disabled": h.cfg.AuthDisabled,
+		},
+	})
+}
+
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	c.ClearCookie("zsms_token")
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -209,6 +218,23 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 
 	user, err := h.userRepo.GetByID(c.Context(), userID)
 	if err != nil || user == nil {
+		if h.cfg.AuthDisabled {
+			email, _ := c.Locals("user_email").(string)
+			if email == "" {
+				email = "admin@ztechai.us"
+			}
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"success": true,
+				"data": fiber.Map{
+					"user": fiber.Map{
+						"id":        userID,
+						"email":     email,
+						"full_name": "ZSMS Administrator (Testing Mode)",
+						"status":    "active",
+					},
+				},
+			})
+		}
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"success": false,
 			"error": fiber.Map{"code": "USER_NOT_FOUND", "message": "User profile not found."},

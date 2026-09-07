@@ -43,6 +43,7 @@ type Config struct {
 	RedisMaxRetries int
 
 	// Auth & Security
+	AuthDisabled               bool
 	JWTSecret                  string
 	JWTExpirationHours         int
 	PairingCodeExpirationMin   int
@@ -174,6 +175,7 @@ func Load() (*Config, error) {
 		}(),
 		RedisMaxRetries: getEnvAsInt("REDIS_MAX_RETRIES", 3),
 
+		AuthDisabled:             getEnvAsBool("AUTH_DISABLED", false),
 		JWTSecret:                getEnv("JWT_SECRET", "dev_jwt_secret_do_not_use_in_production_min_64_bytes_required_random_string"),
 		JWTExpirationHours:       getEnvAsInt("JWT_EXPIRATION_HOURS", 72),
 		PairingCodeExpirationMin: getEnvAsInt("PAIRING_CODE_EXPIRATION", 10),
@@ -226,7 +228,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.AppEnv == "production" {
-		if c.JWTSecret == "" || strings.HasPrefix(c.JWTSecret, "dev_") {
+		if !c.AuthDisabled && (c.JWTSecret == "" || strings.HasPrefix(c.JWTSecret, "dev_")) {
 			return errors.New("production environment requires a secure, non-default JWT_SECRET")
 		}
 		if c.DatabaseURL == "" {
@@ -247,6 +249,7 @@ func (c *Config) MaskedSummary() map[string]interface{} {
 		"app_env":             c.AppEnv,
 		"app_name":            c.AppName,
 		"app_debug":           c.AppDebug,
+		"auth_disabled":       c.AuthDisabled,
 		"port":                c.Port,
 		"host":                c.Host,
 		"app_url":             c.AppURL,

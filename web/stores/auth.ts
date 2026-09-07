@@ -11,6 +11,7 @@ export interface AuthState {
   token: string | null
   user: User | null
   loading: boolean
+  authDisabled: boolean
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -18,15 +19,49 @@ export const useAuthStore = defineStore('auth', {
     token: null,
     user: null,
     loading: false,
+    authDisabled: false,
   }),
 
   getters: {
-    isAuthenticated: (state) => !!state.token,
-    userRole: (state) => state.user?.role || 'user',
+    isAuthenticated: (state) => state.authDisabled || !!state.token,
+    userRole: (state) => state.user?.role || (state.authDisabled ? 'admin' : 'user'),
   },
 
   actions: {
-    initAuth() {
+    async checkAuthConfig(): Promise<boolean> {
+      const config = useRuntimeConfig()
+      let isDisabled = !!config.public.authDisabled
+      const apiEndpoint = (config.public.apiBaseUrl as string) || (config.public.apiUrl as string) || 'https://sms-api.ztechai.us'
+      try {
+        const res = await fetch(`${apiEndpoint}/api/v1/auth/config`)
+        if (res.ok) {
+          const json = await res.json()
+          if (json?.success && typeof json?.data?.auth_disabled === 'boolean') {
+            isDisabled = isDisabled || json.data.auth_disabled
+          }
+        }
+      } catch {
+        // Fallback to runtime config if network check fails
+      }
+      this.authDisabled = isDisabled
+      return isDisabled
+    },
+
+    async initAuth() {
+      await this.checkAuthConfig()
+      if (this.authDisabled) {
+        if (!this.token) {
+          this.token = 'bypass_testing_token'
+          this.user = {
+            id: '00000000-0000-0000-0000-000000000001',
+            email: 'admin@ztechai.us',
+            role: 'admin',
+          }
+        }
+        this.fetchMe().catch(() => {})
+        return
+      }
+
       if (import.meta.client) {
         const savedToken = localStorage.getItem('zsms_auth_token')
         if (savedToken) {
@@ -99,24 +134,34 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async fetchMe() {
-      if (!this.token) return null
+      if (!this.token && !this.authDisabled) return null
       const config = useRuntimeConfig()
       const apiEndpoint = (config.public.apiBaseUrl as string) || (config.public.apiUrl as string) || 'https://sms-api.ztechai.us'
       const url = `${apiEndpoint}/api/v1/me`
 
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${this.token}`,
-        },
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        this.user = data.data
-        return data.data
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
       }
-      throw new Error('Failed to retrieve user profile')
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`
+      }
+
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers,
+        })
+        const data = await res.json()
+        if (res.ok && data.success && data.data?.user) {
+          this.user = data.data.user
+          return data.data.user
+        }
+      } catch (e) {
+        if (!this.authDisabled) {
+          throw e
+        }
+      }
+      return this.user
     },
 
     logout() {
@@ -125,7 +170,9 @@ export const useAuthStore = defineStore('auth', {
       if (import.meta.client) {
         localStorage.removeItem('zsms_auth_token')
       }
-      navigateTo('/auth/login')
+      if (!this.authDisabled) {
+        navigateTo('/auth/login')
+      }
     },
   },
 })

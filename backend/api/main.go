@@ -125,35 +125,38 @@ func main() {
 	app.Get("/readyz", healthHandler.Ready)
 
 	// 11. Register Routes (both /api/v1 and /v1 for flexibility)
+	userAuth := auth.RequireUserAuth(cfg.JWTSecret, cfg.AuthDisabled, dbClient)
+
 	registerV1Routes := func(router fiber.Router) {
 		// Public Auth
+		router.Get("/auth/config", authHandler.Config)
 		router.Post("/auth/register", authHandler.Register)
 		router.Post("/auth/login", authHandler.Login)
 		router.Post("/auth/logout", authHandler.Logout)
 
 		// Protected User Profile
-		router.Get("/me", auth.RequireUserAuth(cfg.JWTSecret), authHandler.Me)
+		router.Get("/me", userAuth, authHandler.Me)
 
 		// Phone Pairing
-		router.Post("/pairing/sessions", auth.RequireUserAuth(cfg.JWTSecret), pairingHandler.CreateSession)
+		router.Post("/pairing/sessions", userAuth, pairingHandler.CreateSession)
 		router.Post("/pairing/complete", pairingHandler.CompletePairing)
 
 		// Phone Gateways
-		router.Get("/phones", auth.RequireUserAuth(cfg.JWTSecret), phoneHandler.ListPhones)
-		router.Get("/phones/:id", auth.RequireUserAuth(cfg.JWTSecret), phoneHandler.GetPhone)
+		router.Get("/phones", userAuth, phoneHandler.ListPhones)
+		router.Get("/phones/:id", userAuth, phoneHandler.GetPhone)
 		router.Post("/phones/:id/heartbeat", auth.RequireDeviceAuth(dbClient), phoneHandler.Heartbeat)
 
 		// Messaging Endpoints
-		router.Post("/messages", auth.RequireUserAuth(cfg.JWTSecret), msgHandler.SendMessage)
-		router.Get("/messages", auth.RequireUserAuth(cfg.JWTSecret), msgHandler.ListMessages)
-		router.Get("/messages/:id", auth.RequireUserAuth(cfg.JWTSecret), msgHandler.GetMessage)
+		router.Post("/messages", userAuth, msgHandler.SendMessage)
+		router.Get("/messages", userAuth, msgHandler.ListMessages)
+		router.Get("/messages/:id", userAuth, msgHandler.GetMessage)
 
 		// Two-way Conversations
-		router.Get("/message-threads", auth.RequireUserAuth(cfg.JWTSecret), msgHandler.ListThreads)
-		router.Get("/message-threads/:id/messages", auth.RequireUserAuth(cfg.JWTSecret), msgHandler.GetThreadMessages)
+		router.Get("/message-threads", userAuth, msgHandler.ListThreads)
+		router.Get("/message-threads/:id/messages", userAuth, msgHandler.GetThreadMessages)
 
 		// Dashboard Statistics
-		router.Get("/dashboard/stats", auth.RequireUserAuth(cfg.JWTSecret), msgHandler.GetDashboardStats)
+		router.Get("/dashboard/stats", userAuth, msgHandler.GetDashboardStats)
 
 		// Android Gateway Device Callbacks
 		router.Post("/android/messages/:id/result", auth.RequireDeviceAuth(dbClient), msgHandler.MessageResult)

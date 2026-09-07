@@ -22,6 +22,7 @@ export default defineNuxtConfig({
       apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.NUXT_PUBLIC_API_URL || 'https://sms-api.ztechai.us',
       apiUrl: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.NUXT_PUBLIC_API_URL || 'https://sms-api.ztechai.us',
       appName: process.env.NUXT_PUBLIC_APP_NAME || 'ZSMS',
+      authDisabled: process.env.NUXT_PUBLIC_AUTH_DISABLED === 'true' || process.env.AUTH_DISABLED === 'true' || false,
     },
   },
 
