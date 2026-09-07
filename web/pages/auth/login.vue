@@ -70,7 +70,7 @@
 
       <div class="text-center mt-6">
         <span class="text-caption text-medium-emphasis">
-          Local Development • Connect physical Android to PC LAN
+          {{ tab === 'login' ? 'First time here? Switch to the "Register" tab to set up your account.' : 'Already have an account? Switch to the "Sign In" tab.' }}
         </span>
       </div>
     </v-card>

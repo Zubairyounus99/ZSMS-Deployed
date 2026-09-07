@@ -33,6 +33,17 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE deleted_at IS NULL;
 
+INSERT INTO users (email, password_hash, full_name, status, created_at, updated_at)
+VALUES (
+    'admin@ztechai.us',
+    crypt('Admin1234!', gen_salt('bf', 10)),
+    'ZSMS Administrator',
+    'active',
+    NOW(),
+    NOW()
+)
+ON CONFLICT (email) DO NOTHING;
+
 -- 3. Phones Table
 CREATE TABLE IF NOT EXISTS phones (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
