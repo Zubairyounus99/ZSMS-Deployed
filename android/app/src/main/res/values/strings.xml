@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">ZSMS</string>
+    <string name="brand_name">ZTechAI</string>
+    <string name="gateway_title">ZSMS Cellular Gateway</string>
+    <string name="status_label">Gateway Status</string>
+    <string name="status_ready">Foundation Initialized</string>
+    <string name="device_info_title">Hardware Diagnostics</string>
+    <string name="stage_info">Stage 2: Monorepo Foundation</string>
+</resources>

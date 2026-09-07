@@ -1,0 +1,202 @@
+# ==============================================================================
+# ZSMS — Staging Dokploy Compose Blueprint (Stage 4.1)
+# Target Infrastructure: Dokploy Staging Stack / Cloudflare / Traefik Ingress
+# Live Domains:
+#   - Frontend Dashboard: https://sms.ztechai.us
+#   - Backend REST & WS:  https://sms-api.ztechai.us
+# ==============================================================================
+
+services:
+  # ==============================================================================
+  # 1. PostgreSQL 16 (Staging Database — Fully Isolated)
+  # ==============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: zsms-staging-postgres
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${DB_USER:-zsms_staging_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Staging database password required}
+      POSTGRES_DB: ${DB_NAME:-zsms_staging_db}
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zsms_staging_user} -d ${DB_NAME:-zsms_staging_db}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - zsms_staging_net
+
+  # ==============================================================================
+  # 2. Redis 7 (Staging Queue, Locks, Presence)
+  # ==============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: zsms-staging-redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis_staging_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - zsms_staging_net
+
+  # ==============================================================================
+  # 3. MinIO (Staging S3 Storage for MMS Attachments)
+  # ==============================================================================
+  minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+    container_name: zsms-staging-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-zsms_staging_admin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?MinIO secret required}
+    volumes:
+      - minio_staging_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - zsms_staging_net
+
+  # ==============================================================================
+  # 4. ZSMS Backend API Service (Go Fiber REST + WebSocket Hub)
+  # ==============================================================================
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zsms-staging-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: staging
+      APP_NAME: ZSMS-Staging
+      APP_DEBUG: "false"
+      LOG_LEVEL: info
+      PORT: 8080
+      HOST: 0.0.0.0
+      APP_URL: https://${WEB_DOMAIN:-sms.ztechai.us}
+      API_URL: https://${API_DOMAIN:-sms-api.ztechai.us}
+      DATABASE_URL: postgres://${DB_USER:-zsms_staging_user}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-zsms_staging_db}?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?JWT secret required}
+      JWT_EXPIRATION_HOURS: 72
+      PAIRING_CODE_EXPIRATION: 10
+      DEVICE_TOKEN_PREFIX: zsms_dev_
+      CORS_ALLOW_ORIGINS: https://${WEB_DOMAIN:-sms.ztechai.us}
+      CORS_ALLOWED_ORIGINS: https://${WEB_DOMAIN:-sms.ztechai.us}
+      STORAGE_PROVIDER: minio
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-zsms_staging_admin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: zsms-staging-media
+      S3_USE_SSL: "false"
+      ALLOW_HTTP_LOCAL: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/livez"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zsms-staging-api.rule=Host(`${API_DOMAIN:-sms-api.ztechai.us}`)"
+      - "traefik.http.routers.zsms-staging-api.entrypoints=websecure"
+      - "traefik.http.routers.zsms-staging-api.tls=true"
+      - "traefik.http.routers.zsms-staging-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.zsms-staging-api.loadbalancer.server.port=8080"
+    networks:
+      - zsms_staging_net
+      - dokploy-network
+
+  # ==============================================================================
+  # 5. ZSMS Background Worker Service (Go Worker)
+  # ==============================================================================
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zsms-staging-worker
+    entrypoint: ["/app/worker"]
+    restart: unless-stopped
+    environment:
+      APP_ENV: staging
+      APP_NAME: ZSMS-Staging
+      APP_DEBUG: "false"
+      DATABASE_URL: postgres://${DB_USER:-zsms_staging_user}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-zsms_staging_db}?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_PROVIDER: minio
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-zsms_staging_admin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: zsms-staging-media
+      S3_USE_SSL: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - zsms_staging_net
+
+  # ==============================================================================
+  # 6. ZSMS Web Dashboard (Nuxt 3 / Vuetify)
+  # ==============================================================================
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: zsms-staging-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NUXT_PUBLIC_API_BASE_URL: https://${API_DOMAIN:-sms-api.ztechai.us}
+      NUXT_PUBLIC_API_URL: https://${API_DOMAIN:-sms-api.ztechai.us}
+      NUXT_PUBLIC_APP_NAME: ZSMS
+    depends_on:
+      api:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zsms-staging-web.rule=Host(`${WEB_DOMAIN:-sms.ztechai.us}`)"
+      - "traefik.http.routers.zsms-staging-web.entrypoints=websecure"
+      - "traefik.http.routers.zsms-staging-web.tls=true"
+      - "traefik.http.routers.zsms-staging-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.zsms-staging-web.loadbalancer.server.port=3000"
+    networks:
+      - zsms_staging_net
+      - dokploy-network
+
+# ==============================================================================
+# Persistent Named Volumes (Isolated per Environment)
+# ==============================================================================
+volumes:
+  postgres_staging_data:
+  redis_staging_data:
+  minio_staging_data:
+
+# ==============================================================================
+# Isolated Networks (Internal & Dokploy Ingress)
+# ==============================================================================
+networks:
+  zsms_staging_net:
+    driver: bridge
+  dokploy-network:
+    external: true

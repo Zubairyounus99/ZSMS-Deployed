@@ -1,0 +1,75 @@
+# ==============================================================================
+# ZSMS Monorepo — Git Ignore Rules
+# ==============================================================================
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.fleet/
+
+# Environment Variables & Secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Go (Backend & Worker)
+backend/bin/
+backend/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+backend/coverage.out
+backend/coverage.html
+
+# Node & Nuxt (Frontend)
+node_modules/
+.nuxt/
+.output/
+.nitro/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Android
+android/.gradle/
+android/**/build/
+android/local.properties
+android/**/google-services.json
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.keystore
+*.jks
+*.hprof
+
+# Persistent Docker Data (when mounted locally)
+.data/
+postgres_data/
+redis_data/
+minio_data/
+/storage/
+
+# Logs
+*.log
+logs/
