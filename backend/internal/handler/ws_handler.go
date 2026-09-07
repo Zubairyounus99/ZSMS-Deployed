@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gofiber/contrib/websocket"

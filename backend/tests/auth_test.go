@@ -2,7 +2,6 @@ package tests
 
 import (
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"us.ztechai.zsms/backend/internal/auth"
