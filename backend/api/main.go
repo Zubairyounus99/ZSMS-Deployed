@@ -40,17 +40,26 @@ func main() {
 	log.Info("configuration loaded safely", slog.Any("summary", cfg.MaskedSummary()))
 
 	// 3. Connect to PostgreSQL
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
 
 	dbClient, err := database.Connect(ctx, cfg)
 	if err != nil {
-		log.Warn("database connection not immediately available (running in degraded readiness mode)",
+		log.Error("database connection failed (API running in degraded mode)",
 			slog.String("error", err.Error()),
 		)
 	} else {
 		log.Info("successfully connected to PostgreSQL store")
 		defer dbClient.Close()
+
+		// Execute schema migrations safely
+		migrationCtx, mCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := dbClient.Migrate(migrationCtx); err != nil {
+			log.Error("database migration error", slog.String("error", err.Error()))
+		} else {
+			log.Info("database schema migrations verified successfully")
+		}
+		mCancel()
 	}
 
 	// 4. Connect to Redis

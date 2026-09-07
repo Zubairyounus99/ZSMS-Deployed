@@ -11,7 +11,7 @@ import (
 func CORS(allowedOrigins []string) fiber.Handler {
 	origins := strings.Join(allowedOrigins, ", ")
 	if origins == "" {
-		origins = "http://localhost:3000"
+		origins = "https://sms.ztechai.us"
 	}
 
 	return cors.New(cors.Config{

@@ -93,17 +93,38 @@ type Config struct {
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() (*Config, error) {
+	appEnv := getEnv("APP_ENV", "development")
+	isProd := appEnv == "production"
+
+	defaultAppURL := "http://localhost:3000"
+	defaultWebURL := "http://localhost:3000"
+	defaultAPIURL := "http://localhost:8080"
+	defaultDocsURL := "http://localhost:8080/docs"
+	defaultAllowHTTP := true
+	defaultPGHost := "localhost"
+	defaultRedisHost := "localhost"
+
+	if isProd {
+		defaultAppURL = "https://sms.ztechai.us"
+		defaultWebURL = "https://sms.ztechai.us"
+		defaultAPIURL = "https://sms-api.ztechai.us"
+		defaultDocsURL = "https://sms-api.ztechai.us/docs"
+		defaultAllowHTTP = false
+		defaultPGHost = "postgres"
+		defaultRedisHost = "redis"
+	}
+
 	cfg := &Config{
-		AppEnv:   getEnv("APP_ENV", "development"),
+		AppEnv:   appEnv,
 		AppName:  getEnv("APP_NAME", "ZSMS"),
-		AppDebug: getEnvAsBool("APP_DEBUG", true),
+		AppDebug: getEnvAsBool("APP_DEBUG", !isProd),
 		Timezone: getEnv("TZ", "UTC"),
 		LogLevel: getEnv("LOG_LEVEL", "info"),
 
-		AppURL:  getEnv("APP_URL", "http://localhost:3000"),
-		WebURL:  getEnv("WEB_URL", "http://localhost:3000"),
-		APIURL:  getEnv("API_URL", "http://localhost:8080"),
-		DocsURL: getEnv("DOCS_URL", "http://localhost:8080/docs"),
+		AppURL:  getEnv("APP_URL", defaultAppURL),
+		WebURL:  getEnv("WEB_URL", defaultWebURL),
+		APIURL:  getEnv("API_URL", defaultAPIURL),
+		DocsURL: getEnv("DOCS_URL", defaultDocsURL),
 
 		Port: getEnvAsInt("PORT", 8080),
 		Host: getEnv("HOST", "0.0.0.0"),
@@ -111,20 +132,29 @@ func Load() (*Config, error) {
 			if origins := getEnvAsSlice("CORS_ALLOW_ORIGINS", nil); len(origins) > 0 {
 				return origins
 			}
-			return getEnvAsSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "https://sms.ztechai.us"})
+			if origins := getEnvAsSlice("CORS_ALLOWED_ORIGINS", nil); len(origins) > 0 {
+				return origins
+			}
+			if isProd {
+				return []string{"https://sms.ztechai.us"}
+			}
+			return []string{"http://localhost:3000", "https://sms.ztechai.us"}
 		}(),
-		AllowHTTPLocal: getEnvAsBool("ALLOW_HTTP_LOCAL", true),
+		AllowHTTPLocal: getEnvAsBool("ALLOW_HTTP_LOCAL", defaultAllowHTTP),
 
 		DatabaseURL: func() string {
 			if explicit := getEnv("DATABASE_URL", ""); explicit != "" {
 				return explicit
 			}
-			pgUser := getEnv("POSTGRES_USER", "zsms_user")
-			pgPass := getEnv("POSTGRES_PASSWORD", "zsms_dev_password")
-			pgHost := getEnv("POSTGRES_HOST", "localhost")
-			pgPort := getEnv("POSTGRES_PORT", "5432")
-			pgDB := getEnv("POSTGRES_DB", "zsms_db")
-			return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", pgUser, pgPass, pgHost, pgPort, pgDB)
+			pgUser := getEnv("POSTGRES_USER", getEnv("DB_USER", "zsms_user"))
+			pgPass := getEnv("POSTGRES_PASSWORD", getEnv("DB_PASSWORD", "zsms_dev_password"))
+			pgHost := getEnv("POSTGRES_HOST", getEnv("DB_HOST", defaultPGHost))
+			pgPort := getEnv("POSTGRES_PORT", getEnv("DB_PORT", "5432"))
+			pgDB := getEnv("POSTGRES_DB", getEnv("DB_NAME", "zsms_db"))
+			if pgPass != "" {
+				return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", pgUser, pgPass, pgHost, pgPort, pgDB)
+			}
+			return fmt.Sprintf("postgres://%s@%s:%s/%s?sslmode=disable", pgUser, pgHost, pgPort, pgDB)
 		}(),
 		DBMaxOpenConns:       getEnvAsInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns:       getEnvAsInt("DB_MAX_IDLE_CONNS", 10),
@@ -134,7 +164,7 @@ func Load() (*Config, error) {
 			if explicit := getEnv("REDIS_URL", ""); explicit != "" {
 				return explicit
 			}
-			redisHost := getEnv("REDIS_HOST", "localhost")
+			redisHost := getEnv("REDIS_HOST", defaultRedisHost)
 			redisPort := getEnv("REDIS_PORT", "6379")
 			redisPass := getEnv("REDIS_PASSWORD", "")
 			if redisPass != "" {

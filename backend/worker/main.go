@@ -30,7 +30,7 @@ func main() {
 	)
 
 	// 3. Connect to PostgreSQL
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
 
 	dbClient, err := database.Connect(ctx, cfg)

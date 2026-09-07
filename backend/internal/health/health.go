@@ -70,6 +70,7 @@ func (h *Handler) Ready(c *fiber.Ctx) error {
 		}
 	} else {
 		checks["database"] = "unconfigured"
+		isReady = false
 	}
 
 	// Check Redis
@@ -82,6 +83,7 @@ func (h *Handler) Ready(c *fiber.Ctx) error {
 		}
 	} else {
 		checks["redis"] = "unconfigured"
+		isReady = false
 	}
 
 	statusCode := fiber.StatusOK

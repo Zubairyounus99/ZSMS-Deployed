@@ -29,15 +29,28 @@ func Connect(ctx context.Context, cfg *config.Config) (*Client, error) {
 
 	rdb := redis.NewClient(opt)
 
-	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
+	// Retry loop: Redis container may take a moment to accept connections on cold boot
+	var lastErr error
+	maxRetries := 15
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err = rdb.Ping(pingCtx).Err()
+		cancel()
+		if err == nil {
+			return &Client{RDB: rdb}, nil
+		}
+		lastErr = err
 
-	if err := rdb.Ping(pingCtx).Err(); err != nil {
-		_ = rdb.Close()
-		return nil, fmt.Errorf("failed to ping redis: %w", err)
+		select {
+		case <-ctx.Done():
+			_ = rdb.Close()
+			return nil, fmt.Errorf("redis connection context cancelled: %w", ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
 	}
 
-	return &Client{RDB: rdb}, nil
+	_ = rdb.Close()
+	return nil, fmt.Errorf("failed to connect to redis after %d attempts: %w", maxRetries, lastErr)
 }
 
 // Ping checks if Redis is reachable.
