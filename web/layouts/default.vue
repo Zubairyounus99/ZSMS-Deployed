@@ -138,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import { useAuthStore } from '~/stores/auth'
 
@@ -204,16 +204,14 @@ const mgmtNav = [
   { title: 'Administration', to: '/admin', icon: 'mdi-shield-crown-outline' },
 ]
 
-onMounted(async () => {
-  await authStore.initAuth()
-  if (!authStore.authDisabled && !authStore.isAuthenticated) {
-    navigateTo('/auth/login')
-  }
+let healthTimer: any = null
 
+async function checkApiHealth() {
   const config = useRuntimeConfig()
-  const apiEndpoint = (config.public.apiBaseUrl as string) || (config.public.apiUrl as string) || 'https://sms-api.ztechai.us'
+  const rawEndpoint = (config.public.apiBaseUrl as string) || (config.public.apiUrl as string) || 'https://sms-api.ztechai.us'
+  const apiEndpoint = rawEndpoint.replace(/\/+$/, '')
   try {
-    const res = await fetch(`${apiEndpoint}/livez`, { method: 'GET' })
+    const res = await fetch(`${apiEndpoint}/livez`, { method: 'GET', mode: 'cors' })
     if (res.ok) {
       apiStatus.value = 'online'
     } else {
@@ -221,6 +219,22 @@ onMounted(async () => {
     }
   } catch {
     apiStatus.value = 'offline'
+  }
+}
+
+onMounted(async () => {
+  await authStore.initAuth()
+  if (!authStore.authDisabled && !authStore.isAuthenticated) {
+    navigateTo('/auth/login')
+  }
+
+  await checkApiHealth()
+  healthTimer = setInterval(checkApiHealth, 30000)
+})
+
+onUnmounted(() => {
+  if (healthTimer) {
+    clearInterval(healthTimer)
   }
 })
 </script>

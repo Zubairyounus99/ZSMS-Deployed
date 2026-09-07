@@ -93,7 +93,7 @@
                     android:id="@+id/tvServerUrl"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Server: http://10.0.2.2:8080"
+                    android:text="Server: https://sms-api.ztechai.us"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:layout_marginTop="4dp" />
