@@ -105,6 +105,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.zsms-api.rule=Host(`sms-api.ztechai.us`)"
       - "traefik.http.routers.zsms-api.entrypoints=websecure"
+      - "traefik.http.routers.zsms-api.tls=true"
       - "traefik.http.routers.zsms-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.zsms-api.loadbalancer.server.port=8080"
     networks:
@@ -159,6 +160,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.zsms-web.rule=Host(`sms.ztechai.us`)"
       - "traefik.http.routers.zsms-web.entrypoints=websecure"
+      - "traefik.http.routers.zsms-web.tls=true"
       - "traefik.http.routers.zsms-web.tls.certresolver=letsencrypt"
       - "traefik.http.services.zsms-web.loadbalancer.server.port=3000"
     networks:

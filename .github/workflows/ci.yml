@@ -85,7 +85,8 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
-          NUXT_PUBLIC_API_URL: https://api.sms-test.ztechai.us
+          NUXT_PUBLIC_API_URL: https://sms-api.ztechai.us
+          NUXT_PUBLIC_API_BASE_URL: https://sms-api.ztechai.us
           NUXT_PUBLIC_APP_NAME: ZSMS
 
   docker-lint:

@@ -50,7 +50,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.btnSaveSettings.setOnClickListener {
             var url = binding.etServerUrl.text?.toString()?.trim() ?: ""
             if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                url = "http://$url"
+                url = "https://$url"
             }
             storage.saveServerUrl(url)
             Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
